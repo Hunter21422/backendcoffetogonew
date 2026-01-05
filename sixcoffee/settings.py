@@ -54,7 +54,9 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
-
+ROOT_URLCONF = "sixcoffee.urls"
+WSGI_APPLICATION = "sixcoffee.wsgi.application"
+ASGI_APPLICATION = "sixcoffee.asgi.application"
 # ------------------------------------------------------------------------------
 # DATABASE
 # ------------------------------------------------------------------------------
