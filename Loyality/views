@@ -1,4 +1,4 @@
-# Loyality/views.py — финальная исправленная версия
+# Loyality/views.py
 
 import secrets
 import string
@@ -7,10 +7,11 @@ from datetime import timedelta
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
-from django.utils import timezone
 from django.db.models import F
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
-from rest_framework import permissions, status, viewsets
+from rest_framework import status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -25,21 +26,116 @@ from .serializers import (
     BaristaTokenObtainPairSerializer,
     UserProfileSerializer,
 )
+from .services import validate_telegram_init_data
 
 User = get_user_model()
 
 
-# ==================== ЛОЯЛЬНОСТЬ ====================
+# ==================== TELEGRAM АВТОРИЗАЦИЯ ====================
 
-class LoyaltyProfileViewSet(viewsets.ReadOnlyModelViewSet):
-    serializer_class = UserProfileSerializer
-    permission_classes = [IsAuthenticated]
+class TelegramAuthView(APIView):
+    permission_classes = [AllowAny]
 
-    def get_queryset(self):
-        return LoyaltyProfile.objects.filter(user=self.request.user)
+    def post(self, request):
+        init_data = request.data.get('init_data')
+        if not init_data:
+            return Response({"detail": "init_data required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        valid, result = validate_telegram_init_data(init_data, settings.TELEGRAM_BOT_TOKEN)
+        if not valid:
+            return Response({"detail": result}, status=status.HTTP_400_BAD_REQUEST)
+
+        tg_id = result.get('id')
+        tg_username = result.get('username')
+        first_name = result.get('first_name', '')
+        last_name = result.get('last_name', '')
+
+        try:
+            with transaction.atomic():
+                user, created = User.objects.get_or_create(
+                    telegram_id=tg_id,
+                    defaults={
+                        'username': tg_username or f"tg_{tg_id}",
+                        'first_name': first_name,
+                        'last_name': last_name,
+                        'telegram_username': tg_username,
+                    }
+                )
+                if created:
+                    LoyaltyProfile.objects.create(user=user)
+        except IntegrityError:
+            return Response({"detail": "Ошибка создания пользователя"}, status=status.HTTP_400_BAD_REQUEST)
+
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+        })
 
 
-# ==================== АУТЕНТИФИКАЦИЯ ====================
+# ==================== СТАТУС ЛОЯЛЬНОСТИ ПО TELEGRAM ====================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_loyalty_status_by_telegram(request, telegram_username):
+    username_clean = telegram_username.lstrip('@')
+    user = get_object_or_404(User, telegram_username__iexact=username_clean)
+    profile, _ = LoyaltyProfile.objects.get_or_create(user=user)
+
+    return Response({
+        "username": user.username,
+        "telegram_username": user.telegram_username,
+        "stamps": profile.stamps,
+        "max_stamps": getattr(settings, "LOYALTY_MAX_STAMPS", 6),
+    })
+
+
+# ==================== НАЧИСЛЕНИЕ ШТАМПА БАРИСТОЙ ПО TELEGRAM ====================
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def add_stamp_by_telegram(request):
+    telegram_username = request.data.get("telegram_username")
+    amount = int(request.data.get("amount", 1))
+
+    if not telegram_username:
+        return Response({"detail": "telegram_username required"}, status=400)
+
+    username_clean = telegram_username.lstrip('@')
+    user = get_object_or_404(User, telegram_username__iexact=username_clean)
+
+    if not (request.user.is_staff or getattr(request.user, 'is_barista', False)):
+        return Response({"detail": "Доступ запрещён"}, status=403)
+
+    profile, _ = LoyaltyProfile.objects.get_or_create(user=user)
+    max_stamps = getattr(settings, "LOYALTY_MAX_STAMPS", 6)
+    old_stamps = profile.stamps
+    new_stamps = min(old_stamps + amount, max_stamps)
+    added = new_stamps - old_stamps
+
+    if added <= 0:
+        return Response({"detail": f"Лимит достигнут ({max_stamps})"}, status=400)
+
+    profile.stamps = new_stamps
+    profile.save(update_fields=["stamps"])
+
+    for _ in range(added):
+        LoyaltyStamp.objects.create(
+            user=user,
+            source="manual_barista",
+            created_by=request.user
+        )
+
+    return Response({
+        "detail": f"Начислено {added} штамп(ов)",
+        "stamps_added": added,
+        "stamps_total": new_stamps,
+        "max_stamps": max_stamps,
+        "at_limit": new_stamps >= max_stamps
+    })
+
+
+# ==================== АУТЕНТИФИКАЦИЯ И ПРОФИЛЬ ====================
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
@@ -96,7 +192,6 @@ class BaristaTokenObtainPairView(TokenObtainPairView):
         serializer.is_valid(raise_exception=True)
 
         user = serializer.user
-
         if not (user.is_staff or getattr(user, "is_barista", False)):
             return Response({
                 "error": "Вас нет в списке барист. Обратитесь к администратору."
@@ -108,8 +203,6 @@ class BaristaTokenObtainPairView(TokenObtainPairView):
             "refresh": str(refresh),
         })
 
-
-# ==================== ПРОФИЛЬ ====================
 
 class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
@@ -127,7 +220,7 @@ class UserProfileView(APIView):
         return Response(serializer.data)
 
 
-# ==================== БАРИСТА ====================
+# ==================== РЕГИСТРАЦИЯ БАРИСТЫ ====================
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
@@ -186,25 +279,25 @@ def barista_login_with_code(request):
     username = (request.data.get("username") or "").strip()
     password = request.data.get("password")
     employee_code = (request.data.get("employee_code") or "").strip()
-    
+
     if not all([username, password, employee_code]):
         return Response({"error": "Все поля обязательны"}, status=400)
-    
+
     valid_codes = getattr(settings, "BARISTA_MASTER_CODES", []) or [getattr(settings, "BARISTA_MASTER_CODE", "555")]
     if employee_code not in valid_codes:
         return Response({"error": "Неверный мастер-код сотрудника."}, status=400)
-    
+
     try:
         user = User.objects.get(username=username)
     except User.DoesNotExist:
         return Response({"error": "Пользователь не найден"}, status=404)
-    
+
     if not user.check_password(password):
         return Response({"error": "Неверный пароль"}, status=400)
-    
+
     if not (user.is_staff or getattr(user, "is_barista", False)):
         return Response({"error": "Вас нет в списке барист."}, status=403)
-    
+
     refresh = RefreshToken.for_user(user)
     return Response({
         "access": str(refresh.access_token),
@@ -212,7 +305,7 @@ def barista_login_with_code(request):
     })
 
 
-# ==================== ЛОЯЛЬНОСТЬ ====================
+# ==================== КОДЫ ЛОЯЛЬНОСТИ ====================
 
 def _unique_code(length=6):
     while True:
@@ -231,7 +324,6 @@ class GenerateLoyaltyCodeView(APIView):
         return Response({"code": code, "expires_at": expires_at.isoformat()})
 
 
-# АКТИВАЦИЯ КОДА С НАЧИСЛЕНИЕМ ШТАМПА — рабочий Redeem
 class RedeemLoyaltyCodeView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -249,19 +341,16 @@ class RedeemLoyaltyCodeView(APIView):
                 if timezone.now() > lc.expires_at:
                     return Response({"detail": "Код истёк"}, status=400)
 
-                # Начисляем штамп клиенту
                 profile, _ = LoyaltyProfile.objects.get_or_create(user=lc.user)
                 profile.stamps = F("stamps") + 1
                 profile.save()
                 profile.refresh_from_db()
 
-                # Активируем код
                 lc.redeemed = True
                 lc.redeemed_at = timezone.now()
                 lc.redeemed_by = request.user
                 lc.save(update_fields=["redeemed", "redeemed_at", "redeemed_by"])
 
-                # Записываем в статистику штампов
                 LoyaltyStamp.objects.create(
                     user=lc.user,
                     source="code",
@@ -278,7 +367,36 @@ class RedeemLoyaltyCodeView(APIView):
             return Response({"detail": "Код не найден"}, status=404)
 
 
-# РУЧНОЕ НАЧИСЛЕНИЕ ШТАМПОВ
+class CheckLoyaltyCodeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        code = request.data.get("code", "").strip()
+        if not code:
+            return Response({"detail": "Код обязателен"}, status=400)
+
+        try:
+            with transaction.atomic():
+                lc = LoyaltyCode.objects.select_for_update().get(code=code)
+
+                if lc.redeemed:
+                    return Response({"detail": "Код уже был использован"}, status=400)
+                if timezone.now() > lc.expires_at:
+                    return Response({"detail": "Срок действия кода истёк"}, status=400)
+
+                lc.redeemed = True
+                lc.redeemed_at = timezone.now()
+                lc.redeemed_by = request.user
+                lc.save(update_fields=["redeemed", "redeemed_at", "redeemed_by"])
+
+                return Response({"detail": "Код валидный и активирован"}, status=200)
+
+        except LoyaltyCode.DoesNotExist:
+            return Response({"detail": "Такого кода не существует"}, status=404)
+
+
+# ==================== РУЧНОЕ УПРАВЛЕНИЕ ШТАМПАМИ ====================
+
 class AddStampToUserView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -353,36 +471,7 @@ class ResetLoyaltyView(APIView):
         })
 
 
-# ПРОВЕРКА КОДА — только проверка + активация кода (для статистики "активировано кодов")
-class CheckLoyaltyCodeView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        code = request.data.get("code", "").strip()
-        if not code:
-            return Response({"detail": "Код обязателен"}, status=400)
-
-        try:
-            with transaction.atomic():
-                lc = LoyaltyCode.objects.select_for_update().get(code=code)
-
-                if lc.redeemed:
-                    return Response({"detail": "Код уже был использован"}, status=400)
-                if timezone.now() > lc.expires_at:
-                    return Response({"detail": "Срок действия кода истёк"}, status=400)
-
-                # Только активируем код — для статистики "активировано кодов"
-                lc.redeemed = True
-                lc.redeemed_at = timezone.now()
-                lc.redeemed_by = request.user
-                lc.save(update_fields=["redeemed", "redeemed_at", "redeemed_by"])
-
-                # ШТАМП НЕ НАЧИСЛЯЕТСЯ!
-                return Response({"detail": "Код валидный и активирован"}, status=200)
-
-        except LoyaltyCode.DoesNotExist:
-            return Response({"detail": "Такого кода не существует"}, status=404)
-
+# ==================== СТАТИСТИКА И ПРОЧЕЕ ====================
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -408,7 +497,6 @@ def get_loyalty_status(request):
     })
 
 
-# СТАТИСТИКА БАРИСТЫ
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def barista_stats(request):
@@ -434,3 +522,11 @@ def barista_stats(request):
     }
 
     return Response(stats)
+
+
+class LoyaltyProfileViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = UserProfileSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return LoyaltyProfile.objects.filter(user=self.request.user)
