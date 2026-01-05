@@ -124,5 +124,5 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Проектные константы
 LOYALTY_MAX_STAMPS = 6
-BARISTA_MASTER_CODE = "555"
-BARISTA_MASTER_CODES = ["555", "1234", "7777"]  # можно расширять
+BARISTA_MASTER_CODE = "coffetogo555"
+BARISTA_MASTER_CODES = ["coffetogo555", "coffetogo1985", "coffetogo777"]  # можно расширять
