@@ -16,7 +16,7 @@ User = get_user_model()
 # =============================================================================
 
 class UserSerializer(serializers.ModelSerializer):
-    """Полный сериализатор пользователя (для себя, админа)"""
+    """Полный сериализатор пользователя (для админа / себя)"""
     class Meta:
         model = User
         fields = [
@@ -28,7 +28,7 @@ class UserSerializer(serializers.ModelSerializer):
             'phone',
             'name',
             'telegram_id',
-            'telegram_username',         # ← обязательно
+            'telegram_username',           # важно для Telegram-интеграции
             'is_staff',
             'is_barista',
             'date_joined',
@@ -44,7 +44,7 @@ class UserPublicSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'username',
-            'telegram_username',         # ← добавлено, важно для поиска по TG
+            'telegram_username',           # ← обязательно для поиска по TG
             'is_staff',
         ]
         read_only_fields = fields
@@ -96,16 +96,14 @@ class BaristaTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         data["is_staff"] = bool(user.is_staff)
         if user.is_staff:
-            if hasattr(user, "name"):
-                data["name"] = user.name
-            if hasattr(user, "employee_code"):
-                data["employee_code"] = user.employee_code
+            data["name"] = getattr(user, "name", "")
+            data["employee_code"] = getattr(user, "employee_code", None)
 
         return data
 
 
 # =============================================================================
-# Профиль пользователя (PATCH/GET)
+# Профиль пользователя (GET/PATCH)
 # =============================================================================
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -125,7 +123,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "recent_orders",
             "stamps",
             "max_stamps",
-            "telegram_username",      # ← добавлено для совместимости
+            "telegram_username",      # ← добавлено для удобства
         ]
         extra_kwargs = {"username": {"read_only": True}}
 
@@ -139,8 +137,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
     def validate_phone(self, value):
         if not value:
             return ""
-        if not re.fullmatch(r"[0-9+()\- \s]{6,32}", value):
-            raise serializers.ValidationError("Некорректный номер телефона.")
+        pattern = r"[0-9+()\- \s]{6,32}"
+        if not re.fullmatch(pattern, value):
+            raise serializers.ValidationError("Некорректный формат номера телефона")
         return value
 
     def update(self, instance, validated_data):
@@ -152,7 +151,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 
 # =============================================================================
-# Короткий "me" с расширенной статистикой
+# Короткий "me" с расширенной статистикой (для баристы)
 # =============================================================================
 
 class MeSerializer(serializers.ModelSerializer):
@@ -185,7 +184,7 @@ class MeSerializer(serializers.ModelSerializer):
         return int(getattr(settings, "LOYALTY_MAX_STAMPS", 6))
 
     def get_codes_activated(self, obj):
-        # Если есть redeemed_by — используйте его
+        # Считаем коды, которые активировал этот бариста
         return LoyaltyCode.objects.filter(redeemed=True, redeemed_by=obj).count()
 
     def get_stamps_today(self, obj):
@@ -206,5 +205,5 @@ class MeSerializer(serializers.ModelSerializer):
         ).count()
 
 
-# Для обратной совместимости (если где-то используется старое имя)
+# Для обратной совместимости
 UserProfilePatchSerializer = UserProfileSerializer
