@@ -1,29 +1,35 @@
 # backend/settings.py
+
 from pathlib import Path
 from datetime import timedelta
 import os
 
-# ------------------------------------------------------------------------------
-# BASE
-# ------------------------------------------------------------------------------
+# =============================================================================
+# БАЗОВЫЕ НАСТРОЙКИ
+# =============================================================================
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Очень важно: в продакшене ОБЯЗАТЕЛЬНО использовать .env
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY") or "fallback-dev-secret-key-очень-небезопасно"
+# Секретный ключ — ВСЕГДА из переменных окружения!
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("DJANGO_SECRET_KEY is not set in environment variables!")
 
-# В продакшене должно быть False!
-DEBUG = True
+# DEBUG — только локально!
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
-ALLOWED_HOSTS = ["*"]  # ← В продакшене обязательно заменить на реальные домены!
+# В продакшене — конкретные домены!
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
 
-# Telegram Bot Token (лучше всего брать из переменных окружения)
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8269537951:AAGqFmMRwFt-i_v8J6ux9TuJHf4CTaWn4b8")
+# Telegram Bot Token (обязательно из .env)
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+if not TELEGRAM_BOT_TOKEN:
+    raise ValueError("TELEGRAM_BOT_TOKEN is not set!")
 
-# ------------------------------------------------------------------------------
-# APPLICATIONS
-# ------------------------------------------------------------------------------
+# =============================================================================
+# ПРИЛОЖЕНИЯ
+# =============================================================================
 INSTALLED_APPS = [
-    # Django
+    # Django core
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -37,29 +43,35 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "django_filters",
 
-    # Local apps
+    # Local
     "Loyality",
 ]
 
-# ------------------------------------------------------------------------------
+# =============================================================================
 # MIDDLEWARE
-# ------------------------------------------------------------------------------
+# =============================================================================
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",           # Всегда первым!
+    "corsheaders.middleware.CorsMiddleware",  # Всегда первым!
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
-    # "django.middleware.csrf.CsrfViewMiddleware",     # ← для чистого JWT API обычно выключают
+    # CSRF отключён для чистого JWT API
+    # "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+# =============================================================================
+# URLS / WSGI / ASGI
+# =============================================================================
 ROOT_URLCONF = "sixcoffee.urls"
 WSGI_APPLICATION = "sixcoffee.wsgi.application"
 ASGI_APPLICATION = "sixcoffee.asgi.application"
-# ------------------------------------------------------------------------------
-# DATABASE
-# ------------------------------------------------------------------------------
+
+# =============================================================================
+# БАЗА ДАННЫХ (SQLite для простоты, в проде лучше PostgreSQL)
+# =============================================================================
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -67,9 +79,9 @@ DATABASES = {
     }
 }
 
-# ------------------------------------------------------------------------------
+# =============================================================================
 # REST FRAMEWORK + JWT
-# ------------------------------------------------------------------------------
+# =============================================================================
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -82,6 +94,7 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_RENDERER_CLASSES": (
         "rest_framework.renderers.JSONRenderer",
+        # BrowsableAPI только в DEBUG-режиме (чтобы не искать шаблоны в проде)
         "rest_framework.renderers.BrowsableAPIRenderer" if DEBUG else (),
     ),
 }
@@ -94,37 +107,53 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-# ------------------------------------------------------------------------------
-# CORS — для фронтенда (Vue/Vite и т.д.)
-# ------------------------------------------------------------------------------
+# =============================================================================
+# CORS (для фронтенда)
+# =============================================================================
 CORS_ALLOW_ALL_ORIGINS = False
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",      # Vite по умолчанию
+    "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "http://localhost:8080",
-    "http://127.0.0.1:8080",
-    # В продакшене добавить: "https://ваш-домен.ру"
+    "https://sixcoffee-frontend-new.vercel.app",  # ← добавь свой реальный Vercel-домен
+    # Добавь другие домены по мере необходимости
 ]
 
-CORS_ALLOW_CREDENTIALS = True   # ← если используете cookies/auth через фронт
+CORS_ALLOW_CREDENTIALS = True
 
-CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()  # для fetch/axios с credentials
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
 
-# ------------------------------------------------------------------------------
-# Дополнительные полезные настройки проекта
-# ------------------------------------------------------------------------------
+# =============================================================================
+# СТАТИКА И МЕДИА
+# =============================================================================
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# =============================================================================
+# ЯЗЫК И ВРЕМЯ
+# =============================================================================
 LANGUAGE_CODE = "ru-ru"
 TIME_ZONE = "Europe/Moscow"
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = "/static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
+# =============================================================================
+# ПРОЕКТНЫЕ КОНСТАНТЫ
+# =============================================================================
+LOYALTY_MAX_STAMPS = 6
+BARISTA_MASTER_CODE = "coffetogo555"
+BARISTA_MASTER_CODES = ["coffetogo555", "coffetogo1985", "coffetogo777"]
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# Проектные константы
-LOYALTY_MAX_STAMPS = 6
-BARISTA_MASTER_CODE = "coffetogo555"
-BARISTA_MASTER_CODES = ["coffetogo555", "coffetogo1985", "coffetogo777"]  # можно расширять
+# =============================================================================
+# ПРОДАКШЕН-РЕКОМЕНДАЦИИ (раскомментируй/добавь при переходе)
+# =============================================================================
+# SECURE_SSL_REDIRECT = True
+# SESSION_COOKIE_SECURE = True
+# CSRF_COOKIE_SECURE = True
+# SECURE_BROWSER_XSS_FILTER = True
+# SECURE_CONTENT_TYPE_NOSNIFF = True
+# SECURE_HSTS_SECONDS = 31536000
+# SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+# SECURE_HSTS_PRELOAD = True
