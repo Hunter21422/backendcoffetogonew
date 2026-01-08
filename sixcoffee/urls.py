@@ -12,11 +12,12 @@ router = DefaultRouter()
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path("api/", include("Loyality.urls")),
+    path("", include("Loyality.urls")),
    
 
 ]
 # Медиа в DEBUG
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
 
