@@ -92,10 +92,10 @@ REST_FRAMEWORK = {
     "DEFAULT_FILTER_BACKENDS": (
         "django_filters.rest_framework.DjangoFilterBackend",
     ),
-    "DEFAULT_RENDERER_CLASSES": (
+    "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
-        # BrowsableAPI только в DEBUG-режиме (чтобы не искать шаблоны в проде)
-        "rest_framework.renderers.BrowsableAPIRenderer" if DEBUG else (),
+    ] + (
+        ["rest_framework.renderers.BrowsableAPIRenderer"] if DEBUG else []
     ),
 }
 
