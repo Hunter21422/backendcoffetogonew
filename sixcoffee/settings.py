@@ -1,35 +1,35 @@
-# backend/settings.py
+# backend/settings.py — финальная версия для Render + PostgreSQL (2026)
 
 from pathlib import Path
 from datetime import timedelta
 import os
+import dj_database_url  # ← обязательно для PostgreSQL на Render
 
 # =============================================================================
 # БАЗОВЫЕ НАСТРОЙКИ
 # =============================================================================
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Секретный ключ — ВСЕГДА из переменных окружения!
+# Секретный ключ — ОБЯЗАТЕЛЬНО из переменных окружения Render!
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
     raise ValueError("DJANGO_SECRET_KEY is not set in environment variables!")
 
-# DEBUG — только локально!
-DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+# DEBUG — False в продакшене (Render добавит DEBUG=False)
+DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "yes")
 
-# В продакшене — конкретные домены!
+# Хосты — из env или wildcard (в проде укажи конкретные)
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
 
-# Telegram Bot Token (обязательно из .env)
+# Telegram Bot Token — обязательно из env
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 if not TELEGRAM_BOT_TOKEN:
-    raise ValueError("TELEGRAM_BOT_TOKEN is not set!")
+    raise ValueError("TELEGRAM_BOT_TOKEN is not set in environment variables!")
 
 # =============================================================================
 # ПРИЛОЖЕНИЯ
 # =============================================================================
 INSTALLED_APPS = [
-    # Django core
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -37,13 +37,11 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 
-    # Third-party
     "corsheaders",
     "rest_framework",
     "rest_framework_simplejwt",
     "django_filters",
 
-    # Local
     "Loyality",
 ]
 
@@ -55,7 +53,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
-    # CSRF отключён для чистого JWT API
+    # CSRF отключён для чистого JWT API (если нужен — раскомментируй)
     # "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
@@ -70,13 +68,13 @@ WSGI_APPLICATION = "sixcoffee.wsgi.application"
 ASGI_APPLICATION = "sixcoffee.asgi.application"
 
 # =============================================================================
-# БАЗА ДАННЫХ (SQLite для простоты, в проде лучше PostgreSQL)
+# БАЗА ДАННЫХ — PostgreSQL на Render (автоматически берёт DATABASE_URL)
 # =============================================================================
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
+    "default": dj_database_url.config(
+        default="sqlite:///db.sqlite3",  # fallback для локальной разработки
+        conn_max_age=600,
+    )
 }
 
 # =============================================================================
@@ -108,15 +106,15 @@ SIMPLE_JWT = {
 }
 
 # =============================================================================
-# CORS (для фронтенда)
+# CORS — для фронтенда (Vercel + localhost)
 # =============================================================================
 CORS_ALLOW_ALL_ORIGINS = False
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "https://sixcoffee-frontend-new.vercel.app",  # ← добавь свой реальный Vercel-домен
-    # Добавь другие домены по мере необходимости
+    "https://sixcoffee-frontend-new.vercel.app",  # ← твой реальный Vercel-домен
+    # Добавь другие домены, если нужно (например, preview-версии Vercel)
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -147,13 +145,13 @@ BARISTA_MASTER_CODES = ["coffetogo555", "coffetogo1985", "coffetogo777"]
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # =============================================================================
-# ПРОДАКШЕН-РЕКОМЕНДАЦИИ (раскомментируй/добавь при переходе)
+# ПРОДАКШЕН-НАСТРОЙКИ (раскомментируй после тестов)
 # =============================================================================
 # SECURE_SSL_REDIRECT = True
 # SESSION_COOKIE_SECURE = True
 # CSRF_COOKIE_SECURE = True
 # SECURE_BROWSER_XSS_FILTER = True
 # SECURE_CONTENT_TYPE_NOSNIFF = True
-# SECURE_HSTS_SECONDS = 31536000
+# SECURE_HSTS_SECONDS = 31536000  # 1 год
 # SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 # SECURE_HSTS_PRELOAD = True
