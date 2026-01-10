@@ -1,4 +1,4 @@
-# backend/settings.py — финальная версия для Render + PostgreSQL (2026)
+# backend/settings.py — финальная версия для Render + PostgreSQL (январь 2026)
 
 from pathlib import Path
 from datetime import timedelta
@@ -114,10 +114,12 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "https://sixcoffee-frontend-new.vercel.app",  # ← твой реальный Vercel-домен
-    # Добавь другие домены, если нужно (например, preview-версии Vercel)
+    "https://*.vercel.app",  # ← для preview-веток и всех доменов Vercel
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_METHODS = ["GET", "POST", "PATCH", "DELETE", "OPTIONS", "HEAD"]
+CORS_ALLOW_HEADERS = ["*"]  # ← разрешаем все заголовки (временно для отладки)
 
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
 
