@@ -110,16 +110,16 @@ SIMPLE_JWT = {
 # =============================================================================
 CORS_ALLOW_ALL_ORIGINS = False
 
+
+CORS_ALLOWED_ORIGINS = []                     # очищаем
+CORS_ALLOW_ALL_ORIGINS = True                 # ← опасно, только на 5–10 минут!
+# или хотя бы:
 CORS_ALLOWED_ORIGINS = [
+    "https://sixcoffee-frontend-new-hml1-git-main-hunter21422s-projects.vercel.app",
+    "https://*.vercel.app",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "https://sixcoffee-frontend-new.vercel.app",  # ← твой реальный Vercel-домен
-    "https://*.vercel.app",  # ← для preview-веток и всех доменов Vercel
 ]
-
-CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_METHODS = ["GET", "POST", "PATCH", "DELETE", "OPTIONS", "HEAD"]
-CORS_ALLOW_HEADERS = ["*"]  # ← разрешаем все заголовки (временно для отладки)
 
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
 
