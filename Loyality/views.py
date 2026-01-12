@@ -142,16 +142,34 @@ class RegisterView(APIView):
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.save()
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        user.is_staff = False
-        if hasattr(user, "is_barista"):
-            user.is_barista = False
-        user.save()
+        try:
+            with transaction.atomic():
+                user = serializer.save()
+                user.is_staff = False
+                if hasattr(user, "is_barista"):
+                    user.is_barista = False
+                user.save(update_fields=["is_staff", "is_barista"])
+            return Response({"detail": "Пользователь успешно зарегистрирован"}, status=201)
 
-        return Response({"detail": "Пользователь успешно зарегистрирован"}, status=201)
-
+        except IntegrityError:
+            return Response(
+                {"detail": "Логин уже занят", "field": "username"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except DjangoValidationError as e:
+            return Response(
+                {"detail": str(e), "password_error": True},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as exc:
+            # Для дебага — можно убрать в проде
+            return Response(
+                {"detail": f"Внутренняя ошибка: {str(exc)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
