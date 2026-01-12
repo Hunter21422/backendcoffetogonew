@@ -1,5 +1,3 @@
-# Loyality/views.py
-
 import secrets
 import string
 from datetime import timedelta
@@ -29,10 +27,9 @@ from .serializers import (
 from .services import validate_telegram_init_data
 
 User = get_user_model()
-print("Request data:", request.data)
+
 
 # ==================== TELEGRAM АВТОРИЗАЦИЯ ====================
-
 class TelegramAuthView(APIView):
     permission_classes = [AllowAny]
 
@@ -74,14 +71,12 @@ class TelegramAuthView(APIView):
 
 
 # ==================== СТАТУС ЛОЯЛЬНОСТИ ПО TELEGRAM ====================
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_loyalty_status_by_telegram(request, telegram_username):
     username_clean = telegram_username.lstrip('@')
     user = get_object_or_404(User, telegram_username__iexact=username_clean)
     profile, _ = LoyaltyProfile.objects.get_or_create(user=user)
-
     return Response({
         "username": user.username,
         "telegram_username": user.telegram_username,
@@ -91,7 +86,6 @@ def get_loyalty_status_by_telegram(request, telegram_username):
 
 
 # ==================== НАЧИСЛЕНИЕ ШТАМПА БАРИСТОЙ ПО TELEGRAM ====================
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def add_stamp_by_telegram(request):
@@ -135,8 +129,7 @@ def add_stamp_by_telegram(request):
     })
 
 
-# ==================== АУТЕНТИФИКАЦИЯ И ПРОФИЛЬ ====================
-
+# ==================== ОБЫЧНАЯ РЕГИСТРАЦИЯ ====================
 class RegisterView(APIView):
     permission_classes = [AllowAny]
 
@@ -159,18 +152,14 @@ class RegisterView(APIView):
                 {"detail": "Логин уже занят", "field": "username"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        except DjangoValidationError as e:
-            return Response(
-                {"detail": str(e), "password_error": True},
-                status=status.HTTP_400_BAD_REQUEST
-            )
         except Exception as exc:
-            # Для дебага — можно убрать в проде
             return Response(
                 {"detail": f"Внутренняя ошибка: {str(exc)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+
+# ==================== ПРОФИЛЬ И СМЕНА ПАРОЛЯ ====================
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def me(request):
@@ -192,11 +181,9 @@ class ChangePasswordView(APIView):
     def post(self, request):
         serializer = ChangePasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         user = request.user
         if not user.check_password(serializer.validated_data["old_password"]):
             return Response({"detail": "Старый пароль неверен"}, status=400)
-
         user.set_password(serializer.validated_data["new_password"])
         user.save(update_fields=["password"])
         return Response({"detail": "Пароль успешно изменён"})
@@ -208,13 +195,11 @@ class BaristaTokenObtainPairView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         user = serializer.user
         if not (user.is_staff or getattr(user, "is_barista", False)):
             return Response({
                 "error": "Вас нет в списке барист. Обратитесь к администратору."
             }, status=403)
-
         refresh = RefreshToken.for_user(user)
         return Response({
             "access": str(refresh.access_token),
@@ -239,7 +224,6 @@ class UserProfileView(APIView):
 
 
 # ==================== РЕГИСТРАЦИЯ БАРИСТЫ ====================
-
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def register_barista(request):
@@ -267,7 +251,6 @@ def register_barista(request):
             if hasattr(user, "is_barista"):
                 user.is_barista = True
             user.save()
-
             refresh = RefreshToken.for_user(user)
             return Response({
                 "access": str(refresh.access_token),
@@ -324,7 +307,6 @@ def barista_login_with_code(request):
 
 
 # ==================== КОДЫ ЛОЯЛЬНОСТИ ====================
-
 def _unique_code(length=6):
     while True:
         code = "".join(secrets.choice(string.digits) for _ in range(length))
@@ -353,7 +335,6 @@ class RedeemLoyaltyCodeView(APIView):
         try:
             with transaction.atomic():
                 lc = LoyaltyCode.objects.select_for_update().get(code=code)
-
                 if lc.redeemed:
                     return Response({"detail": "Код уже использован"}, status=400)
                 if timezone.now() > lc.expires_at:
@@ -380,7 +361,6 @@ class RedeemLoyaltyCodeView(APIView):
                     "stamps": profile.stamps,
                     "client": lc.user.username
                 })
-
         except LoyaltyCode.DoesNotExist:
             return Response({"detail": "Код не найден"}, status=404)
 
@@ -396,7 +376,6 @@ class CheckLoyaltyCodeView(APIView):
         try:
             with transaction.atomic():
                 lc = LoyaltyCode.objects.select_for_update().get(code=code)
-
                 if lc.redeemed:
                     return Response({"detail": "Код уже был использован"}, status=400)
                 if timezone.now() > lc.expires_at:
@@ -408,13 +387,11 @@ class CheckLoyaltyCodeView(APIView):
                 lc.save(update_fields=["redeemed", "redeemed_at", "redeemed_by"])
 
                 return Response({"detail": "Код валидный и активирован"}, status=200)
-
         except LoyaltyCode.DoesNotExist:
             return Response({"detail": "Такого кода не существует"}, status=404)
 
 
 # ==================== РУЧНОЕ УПРАВЛЕНИЕ ШТАМПАМИ ====================
-
 class AddStampToUserView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -466,7 +443,6 @@ class ResetLoyaltyView(APIView):
 
     def post(self, request):
         username = request.data.get("username")
-
         if username:
             if not request.user.is_staff:
                 return Response({"detail": "Только бариста"}, status=403)
@@ -490,7 +466,6 @@ class ResetLoyaltyView(APIView):
 
 
 # ==================== СТАТИСТИКА И ПРОЧЕЕ ====================
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_loyalty_status(request):
@@ -538,7 +513,6 @@ def barista_stats(request):
             created_by=request.user
         ).count(),
     }
-
     return Response(stats)
 
 
