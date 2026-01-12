@@ -29,7 +29,7 @@ from .serializers import (
 from .services import validate_telegram_init_data
 
 User = get_user_model()
-
+print("Request data:", request.data)
 
 # ==================== TELEGRAM АВТОРИЗАЦИЯ ====================
 
