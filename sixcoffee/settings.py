@@ -16,7 +16,7 @@ if not SECRET_KEY:
     raise ValueError("DJANGO_SECRET_KEY is not set in environment variables!")
 
 # DEBUG — False в продакшене (Render добавит DEBUG=False)
-DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "yes")
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
 # Хосты — из env или wildcard (в проде укажи конкретные)
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
