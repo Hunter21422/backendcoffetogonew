@@ -129,7 +129,7 @@ def add_stamp_by_telegram(request):
     })
 
 
-# ==================== ОБЫЧНАЯ РЕГИСТРАЦИЯ ====================
+# ==================== ОБЫЧНАЯ РЕГИСТРАЦИЯ (ИСПРАВЛЕНО) ====================
 class RegisterView(APIView):
     permission_classes = [AllowAny]
 
@@ -142,9 +142,17 @@ class RegisterView(APIView):
             with transaction.atomic():
                 user = serializer.save()
                 user.is_staff = False
+                
+                # Безопасная установка is_barista только если поле существует
                 if hasattr(user, "is_barista"):
                     user.is_barista = False
-                user.save(update_fields=["is_staff", "is_barista"])
+                    user.save(update_fields=["is_staff", "is_barista"])
+                else:
+                    user.save(update_fields=["is_staff"])
+                
+                # Создаем профиль лояльности для нового пользователя
+                LoyaltyProfile.objects.get_or_create(user=user)
+                
             return Response({"detail": "Пользователь успешно зарегистрирован"}, status=201)
 
         except IntegrityError:
