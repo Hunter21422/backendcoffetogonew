@@ -106,22 +106,50 @@ SIMPLE_JWT = {
 }
 
 # =============================================================================
-# CORS — для фронтенда (Vercel + localhost)
+# CORS — ИСПРАВЛЕННАЯ ВЕРСИЯ (для фронтенда Vercel + localhost)
 # =============================================================================
-CORS_ALLOW_ALL_ORIGINS = False
+# Временно разрешаем всё для тестирования (НЕБЕЗОПАСНО!)
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
 
+# После успешного теста замени на конкретные домены:
+# CORS_ALLOW_ALL_ORIGINS = False
+# CORS_ALLOWED_ORIGINS = [
+#     "https://sixcoffee-frontend-new-hml1-git-main-hunter21422s-projects.vercel.app",
+#     "https://sixcoffee-frontend-new.vercel.app",  # добавь production URL
+#     "http://localhost:5173",
+#     "http://127.0.0.1:5173",
+# ]
+# CORS_ALLOW_CREDENTIALS = True
 
-CORS_ALLOWED_ORIGINS = []                     # очищаем
-CORS_ALLOW_ALL_ORIGINS = True                 # ← опасно, только на 5–10 минут!
-# или хотя бы:
-CORS_ALLOWED_ORIGINS = [
+# Важно для Django 4.0+ (используй те же домены что и в CORS)
+CSRF_TRUSTED_ORIGINS = [
     "https://sixcoffee-frontend-new-hml1-git-main-hunter21422s-projects.vercel.app",
-    "https://*.vercel.app",
+    "https://sixcoffee-frontend-new.vercel.app",
     "http://localhost:5173",
-    "http://127.0.0.1:5173",
 ]
 
-CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
+# Дополнительные настройки CORS
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 # =============================================================================
 # СТАТИКА И МЕДИА
