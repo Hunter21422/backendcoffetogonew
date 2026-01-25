@@ -1,30 +1,36 @@
-# backend/settings.py — финальная версия для Render + PostgreSQL (январь 2026)
+# backend/settings.py — финальная версия с AUTH_USER_MODEL
 
 from pathlib import Path
 from datetime import timedelta
 import os
-import dj_database_url  # ← обязательно для PostgreSQL на Render
+import dj_database_url
 
 # =============================================================================
 # БАЗОВЫЕ НАСТРОЙКИ
 # =============================================================================
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Секретный ключ — ОБЯЗАТЕЛЬНО из переменных окружения Render!
+# Секретный ключ
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
-    raise ValueError("DJANGO_SECRET_KEY is not set in environment variables!")
+    SECRET_KEY = "q48ugk5tqgv9sw(uoo(=lw6cd85ztme*4vq_bo6x6j$2g1+nv-"
 
-# DEBUG — False в продакшене (Render добавит DEBUG=False)
-DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+    print("╔════════════════════════════════════════════════════════════════════╗")
+    print("║ ВНИМАНИЕ: DJANGO_SECRET_KEY НЕ НАЙДЕН В ПЕРЕМЕННЫХ ОКРУЖЕНИЯ!      ║")
+    print("║ Используется ВРЕМЕННЫЙ НЕБЕЗОПАСНЫЙ ключ ТОЛЬКО для локальной разработки ║")
+    print("║ На Render / продакшене ОБЯЗАТЕЛЬНО задай настоящий секретный ключ! ║")
+    print("╚════════════════════════════════════════════════════════════════════╝")
 
-# Хосты — из env или wildcard (в проде укажи конкретные)
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
+# DEBUG
+DEBUG = os.getenv("DEBUG", "True").lower() == "true"
 
-# Telegram Bot Token — обязательно из env
+# Хосты
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,[::1],*.onrender.com").split(",")
+
+# Telegram Bot Token
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-if not TELEGRAM_BOT_TOKEN:
-    raise ValueError("TELEGRAM_BOT_TOKEN is not set in environment variables!")
+if not TELEGRAM_BOT_TOKEN and not DEBUG:
+    print("WARNING: TELEGRAM_BOT_TOKEN не задан → Telegram-функции работать не будут")
 
 # =============================================================================
 # ПРИЛОЖЕНИЯ
@@ -36,126 +42,107 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-
-    "corsheaders",
+    
+    "Loyality.apps.LoyalityConfig",
+    
     "rest_framework",
     "rest_framework_simplejwt",
-    "django_filters",
+    "corsheaders",
+]
 
-    "Loyality",
+# САМОЕ ВАЖНОЕ — КАСТОМНАЯ МОДЕЛЬ ПОЛЬЗОВАТЕЛЯ
+AUTH_USER_MODEL = 'Loyality.User'   # ← ЭТУ СТРОКУ ДОБАВЬ ОБЯЗАТЕЛЬНО!
+
+# =============================================================================
+# TEMPLATES — обязательно для админки
+# =============================================================================
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
 ]
 
 # =============================================================================
 # MIDDLEWARE
 # =============================================================================
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",  # Всегда первым!
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
-    # CSRF отключён для чистого JWT API (если нужен — раскомментируй)
-    # "django.middleware.csrf.CsrfViewMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 # =============================================================================
-# URLS / WSGI / ASGI
-# =============================================================================
-ROOT_URLCONF = "sixcoffee.urls"
-WSGI_APPLICATION = "sixcoffee.wsgi.application"
-ASGI_APPLICATION = "sixcoffee.asgi.application"
-
-# =============================================================================
-# БАЗА ДАННЫХ — PostgreSQL на Render (автоматически берёт DATABASE_URL)
-# =============================================================================
-DATABASES = {
-    "default": dj_database_url.config(
-        default="sqlite:///db.sqlite3",  # fallback для локальной разработки
-        conn_max_age=600,
-    )
-}
-
-# =============================================================================
 # REST FRAMEWORK + JWT
 # =============================================================================
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
-    "DEFAULT_PERMISSION_CLASSES": (
-        "rest_framework.permissions.IsAuthenticated",
-    ),
-    "DEFAULT_FILTER_BACKENDS": (
-        "django_filters.rest_framework.DjangoFilterBackend",
-    ),
-    "DEFAULT_RENDERER_CLASSES": [
-        "rest_framework.renderers.JSONRenderer",
-    ] + (
-        ["rest_framework.renderers.BrowsableAPIRenderer"] if DEBUG else []
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
     ),
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=12),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
-    "ROTATE_REFRESH_TOKENS": True,
-    "BLACKLIST_AFTER_ROTATION": True,
-    "AUTH_HEADER_TYPES": ("Bearer",),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
 }
 
 # =============================================================================
-# CORS — ИСПРАВЛЕННАЯ ВЕРСИЯ (для фронтенда Vercel + localhost)
+# CORS
 # =============================================================================
-# Временно разрешаем всё для тестирования (НЕБЕЗОПАСНО!)
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = DEBUG
+if not DEBUG:
+    CORS_ALLOWED_ORIGINS = [
+        "https://sixcoffee-frontend-new.vercel.app",
+        "https://*.vercel.app",
+    ]
+    CSRF_TRUSTED_ORIGINS = [
+        "https://sixcoffee-frontend-new.vercel.app",
+        "https://*.vercel.app",
+    ]
 
-# После успешного теста замени на конкретные домены:
-# CORS_ALLOW_ALL_ORIGINS = False
-# CORS_ALLOWED_ORIGINS = [
-#     "https://sixcoffee-frontend-new-hml1-git-main-hunter21422s-projects.vercel.app",
-#     "https://sixcoffee-frontend-new.vercel.app",  # добавь production URL
-#     "http://localhost:5173",
-#     "http://127.0.0.1:5173",
-# ]
-# CORS_ALLOW_CREDENTIALS = True
+# =============================================================================
+# БАЗА ДАННЫХ
+# =============================================================================
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
+}
 
-# Важно для Django 4.0+ (используй те же домены что и в CORS)
-CSRF_TRUSTED_ORIGINS = [
-    "https://sixcoffee-frontend-new-hml1-git-main-hunter21422s-projects.vercel.app",
-    "https://sixcoffee-frontend-new.vercel.app",
-    "http://localhost:5173",
-]
-
-# Дополнительные настройки CORS
-CORS_ALLOW_METHODS = [
-    'DELETE',
-    'GET',
-    'OPTIONS',
-    'PATCH',
-    'POST',
-    'PUT',
-]
-
-CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
-]
+# На Render будет переопределяться через DATABASE_URL
+if "DATABASE_URL" in os.environ:
+    DATABASES['default'] = dj_database_url.config(conn_max_age=600)
+else:
+    print("INFO: Используется локальная SQLite база (db.sqlite3)")
 
 # =============================================================================
 # СТАТИКА И МЕДИА
 # =============================================================================
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 # =============================================================================
 # ЯЗЫК И ВРЕМЯ
@@ -173,15 +160,3 @@ BARISTA_MASTER_CODE = "coffetogo555"
 BARISTA_MASTER_CODES = ["coffetogo555", "coffetogo1985", "coffetogo777"]
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
-# =============================================================================
-# ПРОДАКШЕН-НАСТРОЙКИ (раскомментируй после тестов)
-# =============================================================================
-# SECURE_SSL_REDIRECT = True
-# SESSION_COOKIE_SECURE = True
-# CSRF_COOKIE_SECURE = True
-# SECURE_BROWSER_XSS_FILTER = True
-# SECURE_CONTENT_TYPE_NOSNIFF = True
-# SECURE_HSTS_SECONDS = 31536000  # 1 год
-# SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-# SECURE_HSTS_PRELOAD = True
