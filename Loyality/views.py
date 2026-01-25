@@ -133,38 +133,61 @@ def add_stamp_by_telegram(request):
 class RegisterView(APIView):
     permission_classes = [AllowAny]
 
+    def get(self, request):
+        """GET-запрос возвращает инструкцию вместо ошибки 405"""
+        return Response({
+            "message": "Для регистрации используйте POST-запрос",
+            "required_fields": ["username", "password"],
+            "optional_fields": ["email", "first_name", "last_name"],
+            "rules": {
+                "username": "уникальный, 3–150 символов",
+                "password": "минимум 8 символов, буквы + цифры рекомендуется",
+                "email": "опционально, должен быть валидным"
+            },
+            "example": {
+                "username": "vovus123",
+                "password": "CoffeeLover2025!",
+                "email": "vlad@example.com"
+            }
+        }, status=200)
+
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response(serializer.errors, status=400)
 
         try:
             with transaction.atomic():
                 user = serializer.save()
                 user.is_staff = False
                 
-                # Безопасная установка is_barista только если поле существует
+                # Безопасная установка is_barista
                 if hasattr(user, "is_barista"):
                     user.is_barista = False
                     user.save(update_fields=["is_staff", "is_barista"])
                 else:
                     user.save(update_fields=["is_staff"])
                 
-                # Создаем профиль лояльности для нового пользователя
+                # Профиль лояльности
                 LoyaltyProfile.objects.get_or_create(user=user)
-                
-            return Response({"detail": "Пользователь успешно зарегистрирован"}, status=201)
 
-        except IntegrityError:
-            return Response(
-                {"detail": "Логин уже занят", "field": "username"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({
+                "detail": "Пользователь успешно зарегистрирован",
+                "username": user.username
+            }, status=201)
+
+        except IntegrityError as e:
+            if "username" in str(e).lower():
+                return Response({"detail": "Логин уже занят", "field": "username"}, status=400)
+            if "email" in str(e).lower():
+                return Response({"detail": "Email уже используется", "field": "email"}, status=400)
+            return Response({"detail": "Ошибка уникальности данных"}, status=400)
+
         except Exception as exc:
-            return Response(
-                {"detail": f"Внутренняя ошибка: {str(exc)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            return Response({
+                "detail": f"Внутренняя ошибка: {str(exc)}",
+                "type": "server_error"
+            }, status=500)
 
 
 # ==================== ПРОФИЛЬ И СМЕНА ПАРОЛЯ ====================
