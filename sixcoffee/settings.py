@@ -1,4 +1,4 @@
-# backend/settings.py — финальная версия с AUTH_USER_MODEL
+# backend/settings.py — исправленная версия с ROOT_URLCONF
 
 from pathlib import Path
 from datetime import timedelta
@@ -9,6 +9,10 @@ import dj_database_url
 # БАЗОВЫЕ НАСТРОЙКИ
 # =============================================================================
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Самые важные строки — ДОЛЖНЫ БЫТЬ ЗДЕСЬ
+ROOT_URLCONF = 'sixcoffee.urls'          # ← ОСНОВНОЙ ФАЙЛ URL-МАРШРУТИЗАЦИИ
+WSGI_APPLICATION = 'sixcoffee.wsgi.application'  # ← для gunicorn / wsgi
 
 # Секретный ключ
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
@@ -50,8 +54,8 @@ INSTALLED_APPS = [
     "corsheaders",
 ]
 
-# САМОЕ ВАЖНОЕ — КАСТОМНАЯ МОДЕЛЬ ПОЛЬЗОВАТЕЛЯ
-AUTH_USER_MODEL = 'Loyality.User'   # ← ЭТУ СТРОКУ ДОБАВЬ ОБЯЗАТЕЛЬНО!
+# Кастомная модель пользователя
+AUTH_USER_MODEL = 'Loyality.User'
 
 # =============================================================================
 # TEMPLATES — обязательно для админки
@@ -106,7 +110,7 @@ SIMPLE_JWT = {
 }
 
 # =============================================================================
-# CORS
+# CORS — для фронта на Vercel
 # =============================================================================
 CORS_ALLOW_ALL_ORIGINS = DEBUG
 if not DEBUG:
@@ -129,7 +133,6 @@ DATABASES = {
     }
 }
 
-# На Render будет переопределяться через DATABASE_URL
 if "DATABASE_URL" in os.environ:
     DATABASES['default'] = dj_database_url.config(conn_max_age=600)
 else:
